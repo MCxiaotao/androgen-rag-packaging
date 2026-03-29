@@ -1,0 +1,13 @@
+﻿dist/
+release/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+*.tmp
+*.zip
+*.7z
+Thumbs.db
+.DS_Store
+test.txt

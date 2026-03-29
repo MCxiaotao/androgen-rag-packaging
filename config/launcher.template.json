@@ -1,0 +1,11 @@
+﻿{
+  "app_id": "AndrogenRAG",
+  "display_name": "Androgen RAG",
+  "channel": "stable",
+  "bootstrap_version": "1.0.0",
+  "manifest_url": "https://raw.githubusercontent.com/MCxiaotao/app-update-feed/main/stable.json",
+  "update_enabled": true,
+  "open_browser": true,
+  "default_port": 8501,
+  "request_timeout_seconds": 10
+}

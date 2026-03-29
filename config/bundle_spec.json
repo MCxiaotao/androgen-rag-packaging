@@ -1,0 +1,32 @@
+﻿{
+  "app_id": "AndrogenRAG",
+  "version": "1.0.0",
+  "entry_script": "app/scripts/streamlit_app.py",
+  "source_repo_hint": "D:/androgen_rag",
+  "copy_rules": {
+    "app_dirs": [
+      "scripts",
+      "kb",
+      "pk_models"
+    ],
+    "exclude_globs": [
+      ".git/**",
+      "output/**",
+      "runs/**",
+      "archive/**",
+      "**/__pycache__/**",
+      "scripts/新建文件夹/**"
+    ]
+  },
+  "vendor_layout": {
+    "smartcyp": "vendor/smartcyp",
+    "fpgnn": "vendor/fpgnn",
+    "jre": "vendor/jre",
+    "sygma_package": "runtime/Lib/site-packages/sygma"
+  },
+  "runtime_layout": {
+    "python": "runtime/python.exe",
+    "chemprop": "runtime/Scripts/chemprop.exe",
+    "admet_predict": "runtime/Scripts/admet_predict.exe"
+  }
+}

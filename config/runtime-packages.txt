@@ -1,0 +1,12 @@
+﻿streamlit
+streamlit-ketcher
+pandas
+numpy
+rdkit
+pillow
+requests
+openai
+reportlab
+torch
+sygma
+chemprop
