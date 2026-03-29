@@ -50,7 +50,13 @@ function Invoke-GitRepo {
     )
 
     $safeDir = Get-SafeDirectoryValue -LocalDir $LocalDir
-    & git -c "safe.directory=$safeDir" -C $LocalDir @GitArgs
+    $cmdArgs = @('-c', "safe.directory=$safeDir")
+    if ($script:ProxyUrl) {
+        $cmdArgs += @('-c', "http.proxy=$script:ProxyUrl", '-c', "https.proxy=$script:ProxyUrl")
+    }
+    $cmdArgs += @('-C', $LocalDir)
+    $cmdArgs += $GitArgs
+    & git @cmdArgs
     if ($LASTEXITCODE -ne 0) {
         throw "git failed in ${LocalDir}: git $($GitArgs -join ' ')"
     }
@@ -159,6 +165,7 @@ if (-not $SkipReleaseUpload) {
 }
 
 Write-Host 'Publish flow completed.'
+
 
 
 
