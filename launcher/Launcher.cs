@@ -23,6 +23,7 @@ namespace AndrogenRagLauncher
         public bool open_browser = true;
         public int default_port = 8501;
         public int request_timeout_seconds = 10;
+        public int update_retry_count = 3;
     }
 
     internal sealed class CurrentState
@@ -333,37 +334,93 @@ namespace AndrogenRagLauncher
             if (string.IsNullOrWhiteSpace(manifest.windows.url))
                 return state;
 
+            Log("Remote update available: " + (state.current_version ?? "<none>") + " -> " + manifest.version);
+            if (!string.IsNullOrWhiteSpace(manifest.notes))
+                Log("Release notes: " + manifest.notes);
+
             var downloadDir = Path.Combine(stateDir, "cache", "downloads");
             Directory.CreateDirectory(downloadDir);
             var partial = Path.Combine(downloadDir, manifest.version + ".zip.partial");
             var finalZip = Path.Combine(downloadDir, manifest.version + ".zip");
 
-            using (var client = new WebClient())
+            if (!IsMatchingBundle(finalZip, manifest.windows))
             {
-                client.Headers.Add("User-Agent", "androgen-rag-launcher/1.0");
-                client.DownloadFile(manifest.windows.url, partial);
+                DownloadBundleWithRetries(manifest, partial, settings.update_retry_count);
+                if (File.Exists(finalZip))
+                    File.Delete(finalZip);
+                File.Move(partial, finalZip);
             }
-
-            var fileInfo = new FileInfo(partial);
-            if (manifest.windows.size > 0 && fileInfo.Length != manifest.windows.size)
-                throw new InvalidOperationException("Downloaded size mismatch for " + manifest.version);
-            if (!string.IsNullOrWhiteSpace(manifest.windows.sha256))
-            {
-                var actual = Sha256Of(partial);
-                if (!string.Equals(actual, manifest.windows.sha256, StringComparison.OrdinalIgnoreCase))
-                    throw new InvalidOperationException("SHA256 mismatch for " + manifest.version);
-            }
-
-            if (File.Exists(finalZip))
-                File.Delete(finalZip);
-            File.Move(partial, finalZip);
 
             var target = VersionDir(stateDir, manifest.version);
             InstallZipBundle(finalZip, target);
             state.pending_version = manifest.version;
             SaveCurrentState(stateDir, state);
+            CleanupDownloadCache(downloadDir, manifest.version);
             Log("Installed pending version " + manifest.version);
             return state;
+        }
+
+        private static void DownloadBundleWithRetries(ManifestRoot manifest, string partialPath, int retryCount)
+        {
+            var attempts = Math.Max(1, retryCount);
+            for (var attempt = 1; attempt <= attempts; attempt++)
+            {
+                SafeDeleteFile(partialPath);
+                try
+                {
+                    Log("Downloading full bundle for " + manifest.version + " (attempt " + attempt + "/" + attempts + ")");
+                    using (var client = new WebClient())
+                    {
+                        client.Headers.Add("User-Agent", "androgen-rag-launcher/1.0");
+                        client.DownloadFile(manifest.windows.url, partialPath);
+                    }
+
+                    var fileInfo = new FileInfo(partialPath);
+                    if (manifest.windows.size > 0 && fileInfo.Length != manifest.windows.size)
+                        throw new InvalidOperationException("Downloaded size mismatch for " + manifest.version);
+                    if (!string.IsNullOrWhiteSpace(manifest.windows.sha256))
+                    {
+                        var actual = Sha256Of(partialPath);
+                        if (!string.Equals(actual, manifest.windows.sha256, StringComparison.OrdinalIgnoreCase))
+                            throw new InvalidOperationException("SHA256 mismatch for " + manifest.version);
+                    }
+
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    Log("Bundle download failed on attempt " + attempt + ": " + ex.Message);
+                    SafeDeleteFile(partialPath);
+                    if (attempt == attempts)
+                        throw;
+                    Thread.Sleep(Math.Min(5, attempt) * 1000);
+                }
+            }
+        }
+
+        private static bool IsMatchingBundle(string path, ManifestWindows manifest)
+        {
+            if (!File.Exists(path))
+                return false;
+
+            try
+            {
+                var info = new FileInfo(path);
+                if (manifest.size > 0 && info.Length != manifest.size)
+                    return false;
+                if (!string.IsNullOrWhiteSpace(manifest.sha256))
+                {
+                    var actual = Sha256Of(path);
+                    if (!string.Equals(actual, manifest.sha256, StringComparison.OrdinalIgnoreCase))
+                        return false;
+                }
+                Log("Using cached bundle: " + path);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static void InstallZipBundle(string zipPath, string targetDir)
@@ -739,6 +796,46 @@ namespace AndrogenRagLauncher
             }
             catch
             {
+            }
+        }
+
+        private static void SafeDeleteFile(string path)
+        {
+            try
+            {
+                if (File.Exists(path))
+                    File.Delete(path);
+            }
+            catch
+            {
+            }
+        }
+
+        private static void CleanupDownloadCache(string downloadDir, string keepVersion)
+        {
+            try
+            {
+                if (!Directory.Exists(downloadDir))
+                    return;
+
+                foreach (var partial in Directory.GetFiles(downloadDir, "*.partial"))
+                    SafeDeleteFile(partial);
+
+                var zipFiles = new DirectoryInfo(downloadDir)
+                    .GetFiles("*.zip")
+                    .OrderByDescending(f => f.LastWriteTimeUtc)
+                    .ToList();
+
+                foreach (var file in zipFiles.Skip(3))
+                {
+                    if (string.Equals(Path.GetFileNameWithoutExtension(file.Name), keepVersion, StringComparison.OrdinalIgnoreCase))
+                        continue;
+                    SafeDeleteFile(file.FullName);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("Download cache cleanup skipped: " + ex.Message);
             }
         }
 

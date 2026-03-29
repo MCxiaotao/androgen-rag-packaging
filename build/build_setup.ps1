@@ -75,6 +75,7 @@ $cscArgs = @(
     '/reference:System.Web.Extensions.dll',
     '/reference:System.Windows.Forms.dll',
     '/reference:System.Drawing.dll',
+    '/reference:System.Management.dll',
     '/reference:System.IO.Compression.dll',
     '/reference:System.IO.Compression.FileSystem.dll',
     "/resource:$payloadZip,payload.zip",
@@ -89,5 +90,8 @@ if (Test-Path -LiteralPath $iconPath) {
 $cscArgs += (Join-Path $projectRoot 'installer\SetupBootstrap.cs')
 
 & $csc @cscArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Setup compilation failed with exit code $LASTEXITCODE."
+}
 
 Write-Host "Setup exe written to: $setupExe"

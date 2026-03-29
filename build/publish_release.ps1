@@ -5,6 +5,7 @@
     [string]$Version = '1.0.0',
     [string]$PythonExe = 'D:\miniconda\envs\admet_clean\python.exe',
     [string]$ProxyUrl = 'http://127.0.0.1:7897',
+    [string]$ReleaseNotes = '',
     [switch]$SkipRepoCreate,
     [switch]$SkipReleaseUpload
 )
@@ -26,6 +27,10 @@ $releaseTag = 'v' + $Version
 $releaseUrl = "https://github.com/$GithubOwner/$UpdateFeedRepoName/releases/download/$releaseTag/androgen-rag-bundle-win-x64-$Version.zip"
 $packagingRepo = "$GithubOwner/$PackagingRepoName"
 $updateFeedRepo = "$GithubOwner/$UpdateFeedRepoName"
+
+if ([string]::IsNullOrWhiteSpace($ReleaseNotes)) {
+    $ReleaseNotes = 'Windows setup installer and versioned bundle.'
+}
 
 if (!(Test-Path -LiteralPath $setupExe)) { throw "Missing setup.exe: $setupExe" }
 if (!(Test-Path -LiteralPath $bundleZip)) { throw "Missing bundle zip: $bundleZip" }
@@ -134,7 +139,7 @@ Ensure-RemoteRepo -LocalDir $updateFeedDir -Repo $updateFeedRepo -Visibility 'pu
 Push-Repo -LocalDir $updateFeedDir
 
 Write-Host "==> Regenerating manifest"
-& $PythonExe $manifestScript --version $Version --bundle $bundleZip --url $releaseUrl --out $manifestPath --notes 'v1 packaging baseline: setup installer, private runtime, launcher bootstrap, slimmed vendor bundle.'
+& $PythonExe $manifestScript --version $Version --bundle $bundleZip --url $releaseUrl --out $manifestPath --notes $ReleaseNotes
 if ($LASTEXITCODE -ne 0) {
     throw 'Manifest generator failed.'
 }
@@ -152,7 +157,7 @@ if ($dirty) {
 if (-not $SkipReleaseUpload) {
     Write-Host "==> Publishing release assets"
     if (-not (Test-GhReleaseExists -Repo $updateFeedRepo -Tag $releaseTag)) {
-        & gh release create $releaseTag $setupExe $bundleZip --repo $updateFeedRepo --title $releaseTag --notes 'Windows setup installer and versioned bundle.'
+        & gh release create $releaseTag $setupExe $bundleZip --repo $updateFeedRepo --title $releaseTag --notes $ReleaseNotes
         if ($LASTEXITCODE -ne 0) {
             throw "gh release create failed for $updateFeedRepo $releaseTag"
         }

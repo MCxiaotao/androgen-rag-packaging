@@ -7,5 +7,6 @@
   "update_enabled": true,
   "open_browser": true,
   "default_port": 8501,
-  "request_timeout_seconds": 10
+  "request_timeout_seconds": 10,
+  "update_retry_count": 3
 }

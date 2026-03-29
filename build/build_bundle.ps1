@@ -75,6 +75,35 @@ function Copy-SygmaPackage {
     }
 }
 
+function Remove-TreeIfExists {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    if (Test-Path -LiteralPath $Path) {
+        Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction SilentlyContinue
+    }
+}
+
+function Prune-BundleTree {
+    param([Parameter(Mandatory = $true)][string]$StageRoot)
+
+    Remove-TreeIfExists -Path (Join-Path $StageRoot 'app\scripts\新建文件夹')
+    Remove-TreeIfExists -Path (Join-Path $StageRoot 'app\pk_models\raw')
+    Remove-TreeIfExists -Path (Join-Path $StageRoot 'app\pk_models\predictions')
+
+    $modelRoot = Join-Path $StageRoot 'app\pk_models\models'
+    if (Test-Path -LiteralPath $modelRoot) {
+        Get-ChildItem -LiteralPath $modelRoot -Recurse -Directory -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -in @('trainer_logs', 'checkpoints', '__pycache__') } |
+            Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+        Get-ChildItem -LiteralPath $modelRoot -Recurse -File -ErrorAction SilentlyContinue |
+            Where-Object {
+                $_.Name -in @('test_predictions.csv', 'metrics.csv', 'hparams.yaml') -or
+                $_.Extension -in @('.ckpt', '.tmp', '.log')
+            } |
+            Remove-Item -Force -ErrorAction SilentlyContinue
+    }
+}
+
 function Patch-FpgnnTorchCompatibility {
     param([Parameter(Mandatory = $true)][string]$ToolPy)
 
@@ -143,6 +172,9 @@ if (![string]::IsNullOrWhiteSpace($JavaHomeDir)) {
 if (![string]::IsNullOrWhiteSpace($SygmaSitePackagesDir)) {
     Copy-SygmaPackage -SitePackagesDir ([System.IO.Path]::GetFullPath($SygmaSitePackagesDir)) -RuntimeSitePackagesDir (Join-Path $stageRoot 'runtime\Lib\site-packages')
 }
+
+Prune-BundleTree -StageRoot $stageRoot
+
 $versionJson = @{
     version = $Version
     built_at = (Get-Date).ToUniversalTime().ToString("o")

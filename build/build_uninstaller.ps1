@@ -27,7 +27,8 @@ $cscArgs = @(
     "/out:$target",
     '/reference:System.Web.Extensions.dll',
     '/reference:System.Windows.Forms.dll',
-    '/reference:System.Drawing.dll'
+    '/reference:System.Drawing.dll',
+    '/reference:System.Management.dll'
 )
 if (Test-Path -LiteralPath $iconPath) {
     $cscArgs += "/win32icon:$iconPath"
@@ -35,5 +36,8 @@ if (Test-Path -LiteralPath $iconPath) {
 $cscArgs += $source
 
 & $csc @cscArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Uninstaller compilation failed with exit code $LASTEXITCODE."
+}
 
 Write-Host "Uninstaller exe written to: $target"

@@ -1,9 +1,13 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.IO;
+using System.Linq;
+using System.Management;
 using System.Reflection;
 using System.Text;
+using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -21,6 +25,14 @@ namespace AndrogenRagUninstall
         public string launcher_exe = "launcher.exe";
         public string uninstall_exe = "uninstall.exe";
         public string shortcut_name = "Androgen RAG";
+    }
+
+    internal sealed class RunningProcessInfo
+    {
+        public int Id;
+        public string Name = string.Empty;
+        public string ExecutablePath = string.Empty;
+        public string CommandLine = string.Empty;
     }
 
     internal static class Program
@@ -163,6 +175,14 @@ namespace AndrogenRagUninstall
                 _uninstallButton.Enabled = false;
                 _cancelButton.Enabled = false;
 
+                if (!EnsureNoConflictingProcesses())
+                {
+                    _statusLabel.Text = "卸载已取消。";
+                    _uninstallButton.Enabled = true;
+                    _cancelButton.Enabled = true;
+                    return;
+                }
+
                 RemoveDesktopShortcut();
                 RemoveStartMenuShortcuts();
                 UnregisterUninstallEntry();
@@ -203,6 +223,125 @@ namespace AndrogenRagUninstall
         private void UnregisterUninstallEntry()
         {
             Registry.CurrentUser.DeleteSubKeyTree(@"Software\Microsoft\Windows\CurrentVersion\Uninstall\" + (_manifest.app_id ?? "AndrogenRAG"), false);
+        }
+
+        private bool EnsureNoConflictingProcesses()
+        {
+            var related = FindRelatedProcesses(_manifest.install_dir, _manifest.state_dir);
+            if (related.Count == 0)
+                return true;
+
+            var details = string.Join("\r\n", related.Select(p => "- " + p.Name + " (PID " + p.Id + ")"));
+            var answer = MessageBox.Show(
+                this,
+                "检测到程序仍在运行，卸载前需要先关闭。\r\n\r\n"
+                + details
+                + "\r\n\r\n点击“是”自动结束这些进程并继续卸载，点击“否”取消卸载。",
+                "卸载",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+            if (answer != DialogResult.Yes)
+                return false;
+
+            if (!TryStopProcesses(related, 10))
+            {
+                MessageBox.Show(this, "仍有相关进程未能关闭，请手动退出程序后再卸载。", "卸载", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return false;
+            }
+
+            return true;
+        }
+
+        private static List<RunningProcessInfo> FindRelatedProcesses(string installDir, string stateDir)
+        {
+            var result = new List<RunningProcessInfo>();
+            var currentPid = Process.GetCurrentProcess().Id;
+            var installNeedle = NormalizeNeedle(installDir);
+            var stateNeedle = NormalizeNeedle(stateDir);
+
+            using (var searcher = new ManagementObjectSearcher("SELECT ProcessId, Name, ExecutablePath, CommandLine FROM Win32_Process"))
+            using (var collection = searcher.Get())
+            {
+                foreach (ManagementObject item in collection)
+                {
+                    try
+                    {
+                        var pid = Convert.ToInt32(item["ProcessId"] ?? 0);
+                        if (pid == 0 || pid == currentPid)
+                            continue;
+
+                        var executable = (item["ExecutablePath"] as string) ?? string.Empty;
+                        var commandLine = (item["CommandLine"] as string) ?? string.Empty;
+                        var haystack = NormalizeNeedle(executable + "\n" + commandLine);
+                        if (string.IsNullOrWhiteSpace(haystack))
+                            continue;
+                        if (!haystack.Contains(installNeedle) && !haystack.Contains(stateNeedle))
+                            continue;
+
+                        result.Add(new RunningProcessInfo
+                        {
+                            Id = pid,
+                            Name = ((item["Name"] as string) ?? "process").Trim(),
+                            ExecutablePath = executable,
+                            CommandLine = commandLine,
+                        });
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+
+            return result.OrderBy(p => p.Name).ThenBy(p => p.Id).ToList();
+        }
+
+        private static bool TryStopProcesses(IEnumerable<RunningProcessInfo> processes, int timeoutSeconds)
+        {
+            foreach (var item in processes)
+            {
+                try
+                {
+                    var process = Process.GetProcessById(item.Id);
+                    if (!process.HasExited)
+                        process.Kill();
+                }
+                catch
+                {
+                }
+            }
+
+            var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
+            while (DateTime.UtcNow < deadline)
+            {
+                var anyRunning = false;
+                foreach (var item in processes)
+                {
+                    try
+                    {
+                        var process = Process.GetProcessById(item.Id);
+                        if (!process.HasExited)
+                        {
+                            anyRunning = true;
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (!anyRunning)
+                    return true;
+
+                Thread.Sleep(500);
+            }
+
+            return false;
+        }
+
+        private static string NormalizeNeedle(string value)
+        {
+            return (value ?? string.Empty).Replace('/', '\\').ToLowerInvariant();
         }
 
         private void ScheduleCleanup(bool removeUserData)

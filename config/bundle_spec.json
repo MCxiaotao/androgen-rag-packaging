@@ -15,7 +15,11 @@
       "runs/**",
       "archive/**",
       "**/__pycache__/**",
-      "scripts/新建文件夹/**"
+      "scripts/新建文件夹/**",
+      "pk_models/raw/**",
+      "pk_models/predictions/**",
+      "pk_models/models/**/trainer_logs/**",
+      "pk_models/models/**/checkpoints/**"
     ]
   },
   "vendor_layout": {

@@ -34,5 +34,8 @@ if (Test-Path -LiteralPath $iconPath) {
 $cscArgs += $source
 
 & $csc @cscArgs
+if ($LASTEXITCODE -ne 0) {
+    throw "Launcher compilation failed with exit code $LASTEXITCODE."
+}
 
 Write-Host "Launcher exe written to: $target"
