@@ -35,6 +35,21 @@ if ($ProxyUrl) {
     $env:HTTP_PROXY = $ProxyUrl
 }
 
+function Get-SafeDirectoryValue {
+    param([Parameter(Mandatory = $true)][string]$LocalDir)
+    return [System.IO.Path]::GetFullPath($LocalDir).Replace('\', '/')
+}
+
+function Invoke-GitRepo {
+    param(
+        [Parameter(Mandatory = $true)][string]$LocalDir,
+        [Parameter(ValueFromRemainingArguments = $true)][string[]]$GitArgs
+    )
+
+    $safeDir = Get-SafeDirectoryValue -LocalDir $LocalDir
+    & git -c "safe.directory=$safeDir" -C $LocalDir @GitArgs
+}
+
 function Ensure-RemoteRepo {
     param(
         [Parameter(Mandatory = $true)][string]$LocalDir,
@@ -42,13 +57,13 @@ function Ensure-RemoteRepo {
         [Parameter(Mandatory = $true)][string]$Visibility
     )
 
-    $existingRemote = git -C $LocalDir remote get-url origin 2>$null
-    if ($LASTEXITCODE -eq 0 -and $existingRemote) {
+    $remotes = Invoke-GitRepo -LocalDir $LocalDir remote
+    if ($LASTEXITCODE -eq 0 -and (($remotes | ForEach-Object { $_.ToString().Trim() }) -contains 'origin')) {
         return
     }
 
     if ($SkipRepoCreate) {
-        git -C $LocalDir remote add origin ("https://github.com/" + $Repo + '.git')
+        Invoke-GitRepo -LocalDir $LocalDir remote add origin ("https://github.com/" + $Repo + '.git')
         return
     }
 
@@ -58,13 +73,13 @@ function Ensure-RemoteRepo {
         return
     }
 
-    git -C $LocalDir remote add origin ("https://github.com/" + $Repo + '.git')
-    git -C $LocalDir push -u origin master
+    Invoke-GitRepo -LocalDir $LocalDir remote add origin ("https://github.com/" + $Repo + '.git')
+    Invoke-GitRepo -LocalDir $LocalDir push -u origin master
 }
 
 function Push-Repo {
     param([Parameter(Mandatory = $true)][string]$LocalDir)
-    git -C $LocalDir push -u origin master
+    Invoke-GitRepo -LocalDir $LocalDir push -u origin master
 }
 
 Write-Host "==> Checking GitHub auth"
@@ -81,11 +96,11 @@ Push-Repo -LocalDir $updateFeedDir
 Write-Host "==> Regenerating manifest"
 & $PythonExe $manifestScript --version $Version --bundle $bundleZip --url $releaseUrl --out $manifestPath --notes 'v1 packaging baseline: setup installer, private runtime, launcher bootstrap, slimmed vendor bundle.'
 
-$dirty = git -C $updateFeedDir status --porcelain stable.json
+$dirty = Invoke-GitRepo -LocalDir $updateFeedDir status --porcelain stable.json
 if ($dirty) {
-    git -C $updateFeedDir add stable.json
-    git -C $updateFeedDir commit -m ("Update stable manifest for v" + $Version)
-    git -C $updateFeedDir push
+    Invoke-GitRepo -LocalDir $updateFeedDir add stable.json
+    Invoke-GitRepo -LocalDir $updateFeedDir commit -m ("Update stable manifest for v" + $Version)
+    Invoke-GitRepo -LocalDir $updateFeedDir push
 }
 
 if (-not $SkipReleaseUpload) {
