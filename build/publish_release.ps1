@@ -16,7 +16,7 @@ $workspaceRoot = [System.IO.Path]::GetFullPath((Join-Path $projectRoot '..'))
 $packagingDir = $projectRoot
 $updateFeedDir = Join-Path $workspaceRoot 'app更新源'
 $setupExe = Join-Path $projectRoot 'dist\setup\setup.exe'
-$bundleZip = Join-Path $projectRoot 'dist\bundles\androgen-rag-bundle-win-x64-' + $Version + '.zip'
+$bundleZip = Join-Path $projectRoot ("dist\bundles\androgen-rag-bundle-win-x64-$Version.zip")
 $manifestPath = Join-Path $updateFeedDir 'stable.json'
 $manifestScript = Join-Path $projectRoot 'build\make_release_manifest.py'
 $releaseTag = 'v' + $Version
@@ -99,3 +99,4 @@ if (-not $SkipReleaseUpload) {
 }
 
 Write-Host "Publish flow completed."
+
