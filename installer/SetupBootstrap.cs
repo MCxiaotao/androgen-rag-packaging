@@ -117,6 +117,20 @@ namespace AndrogenRagSetup
             };
             Controls.Add(headerPanel);
 
+            var bannerImage = TryLoadBannerImage();
+            if (bannerImage != null)
+            {
+                var bannerBox = new PictureBox
+                {
+                    Image = bannerImage,
+                    SizeMode = PictureBoxSizeMode.Zoom,
+                    Size = new Size(180, 64),
+                    Location = new Point(510, 12),
+                    Anchor = AnchorStyles.Top | AnchorStyles.Right,
+                };
+                headerPanel.Controls.Add(bannerBox);
+            }
+
             _pageTitleLabel = new Label
             {
                 AutoSize = true,
@@ -751,6 +765,19 @@ namespace AndrogenRagSetup
                 WorkingDirectory = installDir,
                 UseShellExecute = true,
             });
+        }
+
+        private static Image TryLoadBannerImage()
+        {
+            using (var stream = Assembly.GetExecutingAssembly().GetManifestResourceStream("branding_banner.bmp"))
+            {
+                if (stream == null)
+                    return null;
+                using (var image = Image.FromStream(stream))
+                {
+                    return new Bitmap(image);
+                }
+            }
         }
     }
 }

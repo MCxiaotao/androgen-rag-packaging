@@ -31,3 +31,15 @@
 - 重新生成并推送 `stable.json`
 
 默认更新源仓库名是 `app-update-feed`，因为当前 launcher 模板和安装包已经按这个名字写入了 manifest 地址。
+
+## 额外预留
+
+- `assets/branding/`
+  - `banner.bmp` 安装器横幅占位图
+  - `app.ico` 图标占位入口
+- `build/run_local_update_drill.ps1`
+  - 本地 `旧版本 -> 新版本` 更新演练脚本
+- `build/sign_artifacts.ps1`
+  - 签名脚本占位
+- `templates/manifest.delta.example.json`
+  - 差分更新 manifest 占位示例

@@ -28,6 +28,9 @@ def main() -> int:
     parser.add_argument("--app-id", default="AndrogenRAG")
     parser.add_argument("--min-launcher-version", default="1.0.0")
     parser.add_argument("--notes", default="")
+    parser.add_argument("--delta-base-version", default="")
+    parser.add_argument("--delta-url", default="")
+    parser.add_argument("--delta-bundle", default="")
     args = parser.parse_args()
 
     bundle = Path(args.bundle).resolve()
@@ -45,6 +48,16 @@ def main() -> int:
             "size": bundle.stat().st_size,
         },
     }
+
+    if args.delta_base_version and args.delta_url and args.delta_bundle:
+        delta_bundle = Path(args.delta_bundle).resolve()
+        payload["windows"]["delta"] = {
+            "base_version": args.delta_base_version,
+            "algorithm": "placeholder",
+            "url": args.delta_url,
+            "sha256": sha256_of(delta_bundle),
+            "size": delta_bundle.stat().st_size,
+        }
 
     out_path = Path(args.out).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)

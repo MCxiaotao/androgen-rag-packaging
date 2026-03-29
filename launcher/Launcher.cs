@@ -41,6 +41,16 @@ namespace AndrogenRagLauncher
         public string url = "";
         public string sha256 = "";
         public long size = 0;
+        public ManifestDelta delta = null;
+    }
+
+    internal sealed class ManifestDelta
+    {
+        public string base_version = "";
+        public string algorithm = "placeholder";
+        public string url = "";
+        public string sha256 = "";
+        public long size = 0;
     }
 
     internal sealed class ManifestRoot
@@ -316,6 +326,10 @@ namespace AndrogenRagLauncher
                 Log("Remote bundle requires newer launcher: " + manifest.min_launcher_version);
                 return state;
             }
+            if (manifest.windows.delta != null && !string.IsNullOrWhiteSpace(manifest.windows.delta.url))
+            {
+                Log("Delta update advertised for " + manifest.windows.delta.base_version + " -> " + manifest.version + " (" + manifest.windows.delta.algorithm + "), falling back to full bundle in v1.");
+            }
             if (string.IsNullOrWhiteSpace(manifest.windows.url))
                 return state;
 
@@ -356,8 +370,10 @@ namespace AndrogenRagLauncher
         {
             var parent = Directory.GetParent(targetDir).FullName;
             Directory.CreateDirectory(parent);
-            var extractDir = Path.Combine(parent, "extract_" + Guid.NewGuid().ToString("N"));
-            var stageDir = Path.Combine(parent, "stage_" + Guid.NewGuid().ToString("N"));
+            var tempRoot = Path.Combine(Path.GetTempPath(), "ARStage");
+            Directory.CreateDirectory(tempRoot);
+            var extractDir = Path.Combine(tempRoot, "e_" + Guid.NewGuid().ToString("N"));
+            var stageDir = Path.Combine(tempRoot, "s_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(extractDir);
             try
             {
@@ -369,7 +385,7 @@ namespace AndrogenRagLauncher
                 Directory.Move(extracted, stageDir);
                 if (Directory.Exists(targetDir))
                     Directory.Delete(targetDir, true);
-                Directory.Move(stageDir, targetDir);
+                MoveDirectoryOrCopy(stageDir, targetDir);
             }
             finally
             {
@@ -693,6 +709,24 @@ namespace AndrogenRagLauncher
             foreach (var dir in source.GetDirectories())
             {
                 CopyDirectory(dir.FullName, Path.Combine(destDir, dir.Name), overwrite);
+            }
+        }
+
+        private static void MoveDirectoryOrCopy(string sourceDir, string destDir)
+        {
+            try
+            {
+                Directory.Move(sourceDir, destDir);
+            }
+            catch (IOException)
+            {
+                CopyDirectory(sourceDir, destDir, true);
+                SafeDeleteDirectory(sourceDir);
+            }
+            catch (UnauthorizedAccessException)
+            {
+                CopyDirectory(sourceDir, destDir, true);
+                SafeDeleteDirectory(sourceDir);
             }
         }
 

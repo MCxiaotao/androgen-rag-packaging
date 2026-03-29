@@ -1,0 +1,21 @@
+{
+  "app_id": "AndrogenRAG",
+  "channel": "stable",
+  "version": "1.0.1",
+  "pub_date": "2026-03-30T00:00:00Z",
+  "notes": "示例：包含 full bundle 和 delta placeholder",
+  "min_launcher_version": "1.0.0",
+  "windows": {
+    "arch": "x64",
+    "url": "https://github.com/MCxiaotao/app-update-feed/releases/download/v1.0.1/androgen-rag-bundle-win-x64-1.0.1.zip",
+    "sha256": "FULL_BUNDLE_SHA256",
+    "size": 0,
+    "delta": {
+      "base_version": "1.0.0",
+      "algorithm": "placeholder",
+      "url": "https://github.com/MCxiaotao/app-update-feed/releases/download/v1.0.1/androgen-rag-delta-1.0.0-to-1.0.1.bin",
+      "sha256": "DELTA_SHA256",
+      "size": 0
+    }
+  }
+}
