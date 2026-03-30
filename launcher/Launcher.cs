@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -95,6 +95,7 @@ namespace AndrogenRagLauncher
         {
             try
             {
+                ConfigureNetworking();
                 var installDir = InstallRoot();
                 var settings = LoadSettings(installDir);
                 var stateDir = StateRoot(settings);
@@ -168,6 +169,15 @@ namespace AndrogenRagLauncher
                 Console.Error.WriteLine(ex);
                 return 1;
             }
+        }
+
+        private static void ConfigureNetworking()
+        {
+            const SecurityProtocolType Tls12 = (SecurityProtocolType)3072;
+            var protocols = ServicePointManager.SecurityProtocol | Tls12;
+            if (ServicePointManager.SecurityProtocol != protocols)
+                ServicePointManager.SecurityProtocol = protocols;
+            ServicePointManager.Expect100Continue = false;
         }
 
         private static string InstallRoot()
