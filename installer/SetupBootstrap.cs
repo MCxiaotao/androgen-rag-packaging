@@ -96,6 +96,7 @@ namespace AndrogenRagSetup
         private readonly CheckBox _desktopShortcutBox;
         private readonly CheckBox _startMenuShortcutBox;
         private readonly TextBox _installPathBox;
+        private readonly Button _browseButton;
         private readonly Label _progressLabel;
         private readonly ProgressBar _progressBar;
         private readonly Label _finishSummaryLabel;
@@ -267,19 +268,19 @@ namespace AndrogenRagSetup
             _installPathBox = new TextBox
             {
                 Location = new Point(10, 48),
-                Size = new Size(560, 24),
+                Size = new Size(560, 28),
                 Text = ResolveDefaultInstallDir(),
             };
             _locationPage.Controls.Add(_installPathBox);
 
-            var browseButton = new Button
+            _browseButton = new Button
             {
                 Text = "浏览...",
                 Location = new Point(584, 45),
                 Size = new Size(100, 28),
             };
-            browseButton.Click += BrowseButton_Click;
-            _locationPage.Controls.Add(browseButton);
+            _browseButton.Click += BrowseButton_Click;
+            _locationPage.Controls.Add(_browseButton);
 
             var locationHint = new Label
             {
@@ -387,6 +388,11 @@ namespace AndrogenRagSetup
 
         private void BrowseButton_Click(object sender, EventArgs e)
         {
+            ShowInstallFolderPicker();
+        }
+
+        private void ShowInstallFolderPicker()
+        {
             using (var dialog = new FolderBrowserDialog())
             {
                 dialog.SelectedPath = _installPathBox.Text;
@@ -455,7 +461,16 @@ namespace AndrogenRagSetup
             string validationMessage;
             if (!TryValidateInstallDirectory(installDir, out validationMessage))
             {
-                MessageBox.Show(this, validationMessage, "安装", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                var choice = MessageBox.Show(
+                    this,
+                    validationMessage + "\r\n\r\n点击“是”立即选择其他安装目录，点击“否”返回当前页面后手动修改。",
+                    "安装",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+                _installPathBox.Focus();
+                _installPathBox.SelectAll();
+                if (choice == DialogResult.Yes)
+                    ShowInstallFolderPicker();
                 return;
             }
 
