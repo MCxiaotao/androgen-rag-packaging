@@ -123,13 +123,27 @@ namespace AndrogenRagSetup
             ClientSize = new Size(820, 560);
             Font = SystemFonts.MessageBoxFont;
 
+            var rootLayout = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                ColumnCount = 1,
+                RowCount = 3,
+                Margin = Padding.Empty,
+                Padding = Padding.Empty,
+            };
+            rootLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 104F));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+            rootLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 66F));
+            Controls.Add(rootLayout);
+
             var headerPanel = new Panel
             {
-                Dock = DockStyle.Top,
-                Height = 104,
+                Dock = DockStyle.Fill,
                 BackColor = Color.White,
+                Margin = Padding.Empty,
             };
-            Controls.Add(headerPanel);
+            rootLayout.Controls.Add(headerPanel, 0, 0);
 
             var bannerImage = TryLoadBannerImage();
             if (bannerImage != null)
@@ -167,16 +181,17 @@ namespace AndrogenRagSetup
             {
                 Dock = DockStyle.Fill,
                 Padding = new Padding(24, 24, 24, 18),
+                Margin = Padding.Empty,
             };
-            Controls.Add(contentPanel);
+            rootLayout.Controls.Add(contentPanel, 0, 1);
 
             var footerPanel = new Panel
             {
-                Dock = DockStyle.Bottom,
-                Height = 66,
+                Dock = DockStyle.Fill,
                 Padding = new Padding(18, 10, 18, 10),
+                Margin = Padding.Empty,
             };
-            Controls.Add(footerPanel);
+            rootLayout.Controls.Add(footerPanel, 0, 2);
 
             var footerLine = new Panel
             {
