@@ -342,7 +342,7 @@ namespace AndrogenRagSetup
 
             var locationHint = new Label
             {
-                Text = "程序文件会安装到这里。用户输入输出、日志和缓存会存放在你选择的用户数据目录里，不会跟安装目录混在一起。",
+                Text = "“浏览...”选择的是父目录。安装器会自动在下面创建安装子目录和单独的用户数据子目录，避免文件直接落到 D:\\ 这类根目录里。",
                 AutoSize = false,
                 Size = new Size(680, 92),
                 Location = new Point(10, 182),
@@ -458,10 +458,11 @@ namespace AndrogenRagSetup
         {
             using (var dialog = new FolderBrowserDialog())
             {
-                dialog.SelectedPath = _installPathBox.Text;
-                dialog.Description = "选择安装目录";
+                var leafName = DefaultInstallLeafName();
+                dialog.SelectedPath = ResolveExistingDialogPath(_installPathBox.Text, leafName);
+                dialog.Description = "选择安装父目录，安装器会自动创建 " + leafName;
                 if (dialog.ShowDialog(this) == DialogResult.OK)
-                    _installPathBox.Text = dialog.SelectedPath;
+                    _installPathBox.Text = ComposeChildPath(dialog.SelectedPath, leafName);
             }
         }
 
@@ -469,10 +470,11 @@ namespace AndrogenRagSetup
         {
             using (var dialog = new FolderBrowserDialog())
             {
-                dialog.SelectedPath = _dataPathBox.Text;
-                dialog.Description = "选择用户数据目录";
+                var leafName = DefaultStateLeafName();
+                dialog.SelectedPath = ResolveExistingDialogPath(_dataPathBox.Text, leafName);
+                dialog.Description = "选择用户数据父目录，安装器会自动创建 " + leafName;
                 if (dialog.ShowDialog(this) == DialogResult.OK)
-                    _dataPathBox.Text = dialog.SelectedPath;
+                    _dataPathBox.Text = ComposeChildPath(dialog.SelectedPath, leafName);
             }
         }
 
@@ -531,7 +533,8 @@ namespace AndrogenRagSetup
                 return;
             }
 
-            installDir = Path.GetFullPath(installDir);
+            installDir = NormalizeRequestedPath(installDir, DefaultInstallLeafName());
+            _installPathBox.Text = installDir;
             string validationMessage;
             if (!TryValidateInstallDirectory(installDir, out validationMessage))
             {
@@ -551,7 +554,8 @@ namespace AndrogenRagSetup
             var stateDir = (_dataPathBox.Text ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(stateDir))
                 stateDir = ResolveDefaultStateDir();
-            stateDir = Path.GetFullPath(stateDir);
+            stateDir = NormalizeRequestedPath(stateDir, DefaultStateLeafName());
+            _dataPathBox.Text = stateDir;
             if (!TryValidateStateDirectory(installDir, stateDir, out validationMessage))
             {
                 var dataChoice = MessageBox.Show(
@@ -676,7 +680,7 @@ namespace AndrogenRagSetup
                     _cancelButton.Text = "取消";
                     break;
                 case WizardPage.Location:
-                    SetHeader("选择安装位置", "你可以保留默认安装目录，也可以改成自定义路径。");
+                    SetHeader("选择安装位置", "你可以保留默认目录，也可以选择新的父目录，安装器会自动补出子文件夹。");
                     _backButton.Enabled = true;
                     _nextButton.Enabled = true;
                     _nextButton.Text = "安装";
@@ -717,12 +721,101 @@ namespace AndrogenRagSetup
             if (string.IsNullOrWhiteSpace(localAppData))
                 return Path.Combine(Path.GetTempPath(), _payload.app_id ?? "AndrogenRAG");
 
-            return Path.Combine(localAppData, "Apps", _payload.app_id ?? "AndrogenRAG");
+            return Path.Combine(localAppData, "Apps", DefaultInstallLeafName());
         }
 
         private string ResolveDefaultStateDir()
         {
-            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), _payload.app_id ?? "AndrogenRAG");
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), DefaultStateLeafName());
+        }
+
+        private string DefaultInstallLeafName()
+        {
+            return SanitizeLeafName(_payload.app_id ?? _payload.display_name, "AndrogenRAG");
+        }
+
+        private string DefaultStateLeafName()
+        {
+            return DefaultInstallLeafName() + "-Data";
+        }
+
+        private static string SanitizeLeafName(string value, string fallback)
+        {
+            var candidate = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                candidate = candidate.Replace(invalid.ToString(), string.Empty);
+            return string.IsNullOrWhiteSpace(candidate) ? fallback : candidate;
+        }
+
+        private static string ResolveExistingDialogPath(string currentPath, string leafName)
+        {
+            string normalized;
+            try
+            {
+                normalized = NormalizeRequestedPath(currentPath, leafName);
+            }
+            catch
+            {
+                normalized = string.Empty;
+            }
+
+            var candidate = string.IsNullOrWhiteSpace(normalized)
+                ? Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory)
+                : normalized;
+
+            if (PathEndsWithLeaf(candidate, leafName))
+            {
+                var parent = Directory.GetParent(candidate);
+                if (parent != null)
+                    candidate = parent.FullName;
+            }
+
+            while (!string.IsNullOrWhiteSpace(candidate) && !Directory.Exists(candidate))
+            {
+                var parent = Directory.GetParent(candidate);
+                if (parent == null)
+                    break;
+                candidate = parent.FullName;
+            }
+
+            return Directory.Exists(candidate)
+                ? candidate
+                : Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+        }
+
+        private static string ComposeChildPath(string selectedParent, string leafName)
+        {
+            var normalizedParent = NormalizeRequestedPath(selectedParent, leafName);
+            if (PathEndsWithLeaf(normalizedParent, leafName))
+                return normalizedParent;
+            return Path.Combine(normalizedParent, leafName);
+        }
+
+        private static string NormalizeRequestedPath(string rawPath, string leafName)
+        {
+            var fullPath = Path.GetFullPath((rawPath ?? string.Empty).Trim());
+            if (IsDriveRoot(fullPath))
+                return Path.Combine(fullPath, leafName);
+            return fullPath;
+        }
+
+        private static bool IsDriveRoot(string path)
+        {
+            var fullPath = Path.GetFullPath(path).TrimEnd('\\');
+            var root = Path.GetPathRoot(fullPath);
+            if (string.IsNullOrWhiteSpace(root))
+                return false;
+            return string.Equals(fullPath, root.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static bool PathEndsWithLeaf(string path, string leafName)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+            return string.Equals(
+                new DirectoryInfo(path).Name,
+                leafName,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private static bool TryValidateInstallDirectory(string installDir, out string message)
