@@ -7,6 +7,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Management;
 using System.Reflection;
+using System.Text;
 using System.Threading;
 using System.Web.Script.Serialization;
 using System.Windows.Forms;
@@ -116,13 +117,15 @@ namespace AndrogenRagSetup
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(720, 470);
+            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            ClientSize = new Size(820, 560);
             Font = SystemFonts.MessageBoxFont;
 
             var headerPanel = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 90,
+                Height = 104,
                 BackColor = Color.White,
             };
             Controls.Add(headerPanel);
@@ -134,8 +137,8 @@ namespace AndrogenRagSetup
                 {
                     Image = bannerImage,
                     SizeMode = PictureBoxSizeMode.Zoom,
-                    Size = new Size(180, 64),
-                    Location = new Point(510, 12),
+                    Size = new Size(210, 72),
+                    Location = new Point(586, 14),
                     Anchor = AnchorStyles.Top | AnchorStyles.Right,
                 };
                 headerPanel.Controls.Add(bannerBox);
@@ -153,7 +156,7 @@ namespace AndrogenRagSetup
             _pageSubtitleLabel = new Label
             {
                 AutoSize = false,
-                Size = new Size(650, 40),
+                Size = new Size(520, 42),
                 Location = new Point(24, 48),
                 Text = string.Empty,
             };
@@ -162,14 +165,14 @@ namespace AndrogenRagSetup
             var contentPanel = new Panel
             {
                 Dock = DockStyle.Fill,
-                Padding = new Padding(20, 18, 20, 16),
+                Padding = new Padding(24, 24, 24, 18),
             };
             Controls.Add(contentPanel);
 
             var footerPanel = new Panel
             {
                 Dock = DockStyle.Bottom,
-                Height = 58,
+                Height = 66,
                 Padding = new Padding(18, 10, 18, 10),
             };
             Controls.Add(footerPanel);
@@ -186,7 +189,8 @@ namespace AndrogenRagSetup
             {
                 Text = "< 上一步",
                 Size = new Size(92, 28),
-                Location = new Point(412, 18),
+                Location = new Point(514, 22),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
             };
             _backButton.Click += BackButton_Click;
             footerPanel.Controls.Add(_backButton);
@@ -195,7 +199,8 @@ namespace AndrogenRagSetup
             {
                 Text = "下一步 >",
                 Size = new Size(92, 28),
-                Location = new Point(512, 18),
+                Location = new Point(616, 22),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
             };
             _nextButton.Click += NextButton_Click;
             footerPanel.Controls.Add(_nextButton);
@@ -204,7 +209,8 @@ namespace AndrogenRagSetup
             {
                 Text = "取消",
                 Size = new Size(92, 28),
-                Location = new Point(612, 18),
+                Location = new Point(718, 22),
+                Anchor = AnchorStyles.Bottom | AnchorStyles.Right,
             };
             _cancelButton.Click += CancelButton_Click;
             footerPanel.Controls.Add(_cancelButton);
@@ -227,7 +233,7 @@ namespace AndrogenRagSetup
                 Checked = true,
                 Enabled = false,
                 AutoSize = true,
-                Location = new Point(10, 18),
+                Location = new Point(12, 34),
             };
             _componentsPage.Controls.Add(_installCoreBox);
 
@@ -236,7 +242,7 @@ namespace AndrogenRagSetup
                 Text = "创建桌面快捷方式",
                 Checked = true,
                 AutoSize = true,
-                Location = new Point(10, 58),
+                Location = new Point(12, 76),
             };
             _componentsPage.Controls.Add(_desktopShortcutBox);
 
@@ -245,7 +251,7 @@ namespace AndrogenRagSetup
                 Text = "创建开始菜单项（含卸载入口）",
                 Checked = true,
                 AutoSize = true,
-                Location = new Point(10, 90),
+                Location = new Point(12, 116),
             };
             _componentsPage.Controls.Add(_startMenuShortcutBox);
 
@@ -253,26 +259,24 @@ namespace AndrogenRagSetup
             {
                 Text = "安装完成后，可从桌面快捷方式、开始菜单或安装目录中的 launcher.exe 启动程序。",
                 AutoSize = false,
-                Size = new Size(620, 48),
-                Location = new Point(10, 132),
+                Size = new Size(680, 56),
+                Location = new Point(12, 164),
             };
             _componentsPage.Controls.Add(componentsHint);
 
             _installPathBox = new TextBox
             {
                 Location = new Point(10, 48),
-                Size = new Size(520, 24),
-                Text = string.IsNullOrWhiteSpace(payload.default_install_dir)
-                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs", payload.app_id)
-                    : payload.default_install_dir,
+                Size = new Size(560, 24),
+                Text = ResolveDefaultInstallDir(),
             };
             _locationPage.Controls.Add(_installPathBox);
 
             var browseButton = new Button
             {
                 Text = "浏览...",
-                Location = new Point(544, 45),
-                Size = new Size(92, 28),
+                Location = new Point(584, 45),
+                Size = new Size(100, 28),
             };
             browseButton.Click += BrowseButton_Click;
             _locationPage.Controls.Add(browseButton);
@@ -281,7 +285,7 @@ namespace AndrogenRagSetup
             {
                 Text = "程序文件会安装到这里。用户输入输出、日志和缓存默认存放在 %LOCALAPPDATA%\\" + payload.app_id + "，不会跟安装目录混在一起。",
                 AutoSize = false,
-                Size = new Size(620, 72),
+                Size = new Size(680, 72),
                 Location = new Point(10, 94),
             };
             _locationPage.Controls.Add(locationHint);
@@ -290,7 +294,7 @@ namespace AndrogenRagSetup
             {
                 Text = "准备开始安装。",
                 AutoSize = false,
-                Size = new Size(620, 38),
+                Size = new Size(680, 38),
                 Location = new Point(10, 36),
             };
             _progressPage.Controls.Add(_progressLabel);
@@ -300,14 +304,14 @@ namespace AndrogenRagSetup
                 Style = ProgressBarStyle.Continuous,
                 Value = 0,
                 Location = new Point(10, 86),
-                Size = new Size(626, 22),
+                Size = new Size(680, 22),
             };
             _progressPage.Controls.Add(_progressBar);
 
             _finishSummaryLabel = new Label
             {
                 AutoSize = false,
-                Size = new Size(620, 150),
+                Size = new Size(680, 180),
                 Location = new Point(10, 20),
                 Text = string.Empty,
             };
@@ -318,7 +322,7 @@ namespace AndrogenRagSetup
                 Text = "完成后立即启动 " + payload.display_name,
                 Checked = true,
                 AutoSize = true,
-                Location = new Point(10, 186),
+                Location = new Point(10, 220),
             };
             _finishPage.Controls.Add(_launchAfterInstallBox);
 
@@ -377,6 +381,7 @@ namespace AndrogenRagSetup
             {
                 Dock = DockStyle.Fill,
                 Visible = false,
+                AutoScroll = true,
             };
         }
 
@@ -447,6 +452,17 @@ namespace AndrogenRagSetup
             }
 
             installDir = Path.GetFullPath(installDir);
+            string validationMessage;
+            if (!TryValidateInstallDirectory(installDir, out validationMessage))
+            {
+                MessageBox.Show(this, validationMessage, "安装", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var stateDir = DefaultStateDir();
+            if (!EnsureNoConflictingProcesses(installDir, stateDir))
+                return;
+
             if (Directory.Exists(installDir))
             {
                 try
@@ -498,7 +514,7 @@ namespace AndrogenRagSetup
                     {
                         _installInProgress = false;
                         SetProgressState("安装失败。", ProgressBarStyle.Continuous, 0);
-                        MessageBox.Show(this, ex.ToString(), "安装失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show(this, BuildInstallErrorMessage(ex, installDir), "安装失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         ShowPage(WizardPage.Location);
                     });
                 }
@@ -582,6 +598,76 @@ namespace AndrogenRagSetup
         {
             _pageTitleLabel.Text = title;
             _pageSubtitleLabel.Text = subtitle;
+        }
+
+        private string ResolveDefaultInstallDir()
+        {
+            if (!string.IsNullOrWhiteSpace(_payload.default_install_dir))
+                return _payload.default_install_dir;
+
+            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+            if (string.IsNullOrWhiteSpace(localAppData))
+                return Path.Combine(Path.GetTempPath(), _payload.app_id ?? "AndrogenRAG");
+
+            return Path.Combine(localAppData, "Apps", _payload.app_id ?? "AndrogenRAG");
+        }
+
+        private string DefaultStateDir()
+        {
+            return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), _payload.app_id ?? "AndrogenRAG");
+        }
+
+        private static bool TryValidateInstallDirectory(string installDir, out string message)
+        {
+            try
+            {
+                if (File.Exists(installDir))
+                {
+                    message = "\u5f53\u524d\u5b89\u88c5\u8def\u5f84\u6307\u5411\u4e86\u4e00\u4e2a\u6587\u4ef6\uff0c\u8bf7\u6539\u6210\u6587\u4ef6\u5939\u8def\u5f84\u3002";
+                    return false;
+                }
+
+                Directory.CreateDirectory(installDir);
+                var probePath = Path.Combine(installDir, ".write-test-" + Guid.NewGuid().ToString("N") + ".tmp");
+                File.WriteAllText(probePath, "ok", Encoding.ASCII);
+                File.Delete(probePath);
+                message = string.Empty;
+                return true;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                message =
+                    "\u65e0\u6cd5\u5199\u5165\u5f53\u524d\u5b89\u88c5\u76ee\u5f55\uff1a\r\n"
+                    + installDir
+                    + "\r\n\r\n\u8bf7\u70b9\u51fb\u201c\u6d4f\u89c8...\u201d\u6539\u6210\u4f60\u6709\u5199\u6743\u9650\u7684\u76ee\u5f55\uff0c\u4f8b\u5982 D:\\Apps\\AndrogenRAG \u3002\r\n\r\n"
+                    + ex.Message;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                message =
+                    "\u5f53\u524d\u5b89\u88c5\u76ee\u5f55\u4e0d\u53ef\u7528\uff1a\r\n"
+                    + installDir
+                    + "\r\n\r\n"
+                    + ex.Message;
+                return false;
+            }
+        }
+
+        private static string BuildInstallErrorMessage(Exception ex, string installDir)
+        {
+            if (ex is UnauthorizedAccessException)
+            {
+                return
+                    "\u5b89\u88c5\u5931\u8d25\uff1a\u65e0\u6cd5\u5199\u5165\u5b89\u88c5\u76ee\u5f55\u3002\r\n\r\n"
+                    + installDir
+                    + "\r\n\r\n\u8bf7\u5c1d\u8bd5\u6362\u4e00\u4e2a\u81ea\u5b9a\u4e49\u8def\u5f84\uff0c\u6216\u4ee5\u7ba1\u7406\u5458\u8eab\u4efd\u8fd0\u884c\u5b89\u88c5\u7a0b\u5e8f\u3002\r\n\r\n"
+                    + ex.Message;
+            }
+
+            return
+                "\u5b89\u88c5\u5931\u8d25\uff1a\r\n\r\n"
+                + ex.Message;
         }
 
         private void InstallTo(string installDir)
@@ -730,7 +816,7 @@ namespace AndrogenRagSetup
                 publisher = _payload.publisher ?? "MCxiaotao",
                 version = _payload.bootstrap_version ?? "1.0.0",
                 install_dir = installDir,
-                state_dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), _payload.app_id ?? "AndrogenRAG"),
+                state_dir = DefaultStateDir(),
                 launcher_exe = "launcher.exe",
                 uninstall_exe = "uninstall.exe",
                 shortcut_name = _payload.shortcut_name ?? _payload.display_name ?? "Androgen RAG",

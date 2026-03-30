@@ -62,7 +62,7 @@ $setupPayload = @{
     publisher = 'MCxiaotao'
     bootstrap_version = $Version
     shortcut_name = 'Androgen RAG'
-    default_install_dir = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'Programs', 'AndrogenRAG')
+    default_install_dir = [System.IO.Path]::Combine($env:LOCALAPPDATA, 'Apps', 'AndrogenRAG')
     payload_archive = 'payload.zip'
 }
 $setupPayload | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $payloadJson -Encoding UTF8

@@ -93,17 +93,19 @@ namespace AndrogenRagUninstall
         {
             _manifest = manifest;
 
-            Text = (manifest.display_name ?? "Androgen RAG") + " 卸载";
+            AutoScaleMode = AutoScaleMode.Dpi;
+            AutoScaleDimensions = new SizeF(96F, 96F);
+            Text = (manifest.display_name ?? "Androgen RAG") + " \u5378\u8f7d";
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(650, 300);
+            ClientSize = new Size(720, 340);
             Font = SystemFonts.MessageBoxFont;
 
             var title = new Label
             {
-                Text = "卸载 " + (manifest.display_name ?? "Androgen RAG"),
+                Text = "\u5378\u8f7d " + (manifest.display_name ?? "Androgen RAG"),
                 AutoSize = true,
                 Font = new Font(SystemFonts.MessageBoxFont.FontFamily, 15, FontStyle.Bold),
                 Location = new Point(20, 18),
@@ -113,46 +115,46 @@ namespace AndrogenRagUninstall
             var intro = new Label
             {
                 AutoSize = false,
-                Size = new Size(600, 96),
+                Size = new Size(668, 108),
                 Location = new Point(22, 56),
-                Text = "卸载将移除安装目录中的启动器、版本包和快捷方式。\r\n\r\n"
-                    + "安装目录: " + (_manifest.install_dir ?? string.Empty) + "\r\n"
-                    + "用户数据目录: " + (_manifest.state_dir ?? string.Empty),
+                Text = "\u5378\u8f7d\u5c06\u79fb\u9664\u5b89\u88c5\u76ee\u5f55\u4e2d\u7684\u542f\u52a8\u5668\u3001\u7248\u672c\u5305\u548c\u5feb\u6377\u65b9\u5f0f\u3002\r\n\r\n"
+                    + "\u5b89\u88c5\u76ee\u5f55: " + (_manifest.install_dir ?? string.Empty) + "\r\n"
+                    + "\u7528\u6237\u6570\u636e\u76ee\u5f55: " + (_manifest.state_dir ?? string.Empty),
             };
             Controls.Add(intro);
 
             _removeUserDataBox = new CheckBox
             {
-                Text = "同时删除用户数据目录（input / output / logs / cache）",
+                Text = "\u540c\u65f6\u5220\u9664\u7528\u6237\u6570\u636e\u76ee\u5f55\uff08input / output / logs / cache\uff09",
                 Checked = false,
                 AutoSize = true,
-                Location = new Point(24, 166),
+                Location = new Point(24, 184),
             };
             Controls.Add(_removeUserDataBox);
 
             _statusLabel = new Label
             {
                 AutoSize = false,
-                Size = new Size(420, 44),
-                Location = new Point(22, 214),
+                Size = new Size(470, 46),
+                Location = new Point(22, 238),
                 Text = string.Empty,
             };
             Controls.Add(_statusLabel);
 
             _uninstallButton = new Button
             {
-                Text = "卸载",
-                Size = new Size(92, 28),
-                Location = new Point(446, 226),
+                Text = "\u5378\u8f7d",
+                Size = new Size(96, 30),
+                Location = new Point(516, 246),
             };
             _uninstallButton.Click += UninstallButton_Click;
             Controls.Add(_uninstallButton);
 
             _cancelButton = new Button
             {
-                Text = "取消",
-                Size = new Size(92, 28),
-                Location = new Point(548, 226),
+                Text = "\u53d6\u6d88",
+                Size = new Size(96, 30),
+                Location = new Point(622, 246),
             };
             _cancelButton.Click += delegate { Close(); };
             Controls.Add(_cancelButton);
@@ -162,8 +164,8 @@ namespace AndrogenRagUninstall
         {
             var result = MessageBox.Show(
                 this,
-                "确认卸载 " + (_manifest.display_name ?? "Androgen RAG") + "？",
-                "卸载",
+                "\u786e\u8ba4\u5378\u8f7d " + (_manifest.display_name ?? "Androgen RAG") + "\uff1f",
+                "\u5378\u8f7d",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
             if (result != DialogResult.Yes)
@@ -171,13 +173,13 @@ namespace AndrogenRagUninstall
 
             try
             {
-                _statusLabel.Text = "正在清理快捷方式并准备删除文件...";
+                _statusLabel.Text = "\u6b63\u5728\u6e05\u7406\u5feb\u6377\u65b9\u5f0f\u5e76\u51c6\u5907\u5220\u9664\u6587\u4ef6...";
                 _uninstallButton.Enabled = false;
                 _cancelButton.Enabled = false;
 
                 if (!EnsureNoConflictingProcesses())
                 {
-                    _statusLabel.Text = "卸载已取消。";
+                    _statusLabel.Text = "\u5378\u8f7d\u5df2\u53d6\u6d88\u3002";
                     _uninstallButton.Enabled = true;
                     _cancelButton.Enabled = true;
                     return;
@@ -188,15 +190,15 @@ namespace AndrogenRagUninstall
                 UnregisterUninstallEntry();
                 ScheduleCleanup(_removeUserDataBox.Checked);
 
-                MessageBox.Show(this, "卸载任务已启动。关闭本窗口后，安装目录会自动删除。", "卸载", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show(this, "\u5378\u8f7d\u4efb\u52a1\u5df2\u542f\u52a8\u3002\u5173\u95ed\u672c\u7a97\u53e3\u540e\uff0c\u5b89\u88c5\u76ee\u5f55\u4f1a\u81ea\u52a8\u5220\u9664\u3002", "\u5378\u8f7d", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 Close();
             }
             catch (Exception ex)
             {
-                _statusLabel.Text = "卸载失败。";
+                _statusLabel.Text = "\u5378\u8f7d\u5931\u8d25\u3002";
                 _uninstallButton.Enabled = true;
                 _cancelButton.Enabled = true;
-                MessageBox.Show(this, ex.ToString(), "卸载失败", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show(this, ex.Message, "\u5378\u8f7d\u5931\u8d25", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -234,10 +236,10 @@ namespace AndrogenRagUninstall
             var details = string.Join("\r\n", related.Select(p => "- " + p.Name + " (PID " + p.Id + ")"));
             var answer = MessageBox.Show(
                 this,
-                "检测到程序仍在运行，卸载前需要先关闭。\r\n\r\n"
+                "\u68c0\u6d4b\u5230\u7a0b\u5e8f\u4ecd\u5728\u8fd0\u884c\uff0c\u5378\u8f7d\u524d\u9700\u8981\u5148\u5173\u95ed\u3002\r\n\r\n"
                 + details
-                + "\r\n\r\n点击“是”自动结束这些进程并继续卸载，点击“否”取消卸载。",
-                "卸载",
+                + "\r\n\r\n\u70b9\u51fb\u201c\u662f\u201d\u81ea\u52a8\u7ed3\u675f\u8fd9\u4e9b\u8fdb\u7a0b\u5e76\u7ee7\u7eed\u5378\u8f7d\uff0c\u70b9\u51fb\u201c\u5426\u201d\u53d6\u6d88\u5378\u8f7d\u3002",
+                "\u5378\u8f7d",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Warning);
             if (answer != DialogResult.Yes)
@@ -245,7 +247,7 @@ namespace AndrogenRagUninstall
 
             if (!TryStopProcesses(related, 10))
             {
-                MessageBox.Show(this, "仍有相关进程未能关闭，请手动退出程序后再卸载。", "卸载", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show(this, "\u4ecd\u6709\u76f8\u5173\u8fdb\u7a0b\u672a\u80fd\u5173\u95ed\uff0c\u8bf7\u624b\u52a8\u9000\u51fa\u7a0b\u5e8f\u540e\u518d\u5378\u8f7d\u3002", "\u5378\u8f7d", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return false;
             }
 
@@ -348,7 +350,7 @@ namespace AndrogenRagUninstall
         {
             var installDir = _manifest.install_dir ?? string.Empty;
             if (string.IsNullOrWhiteSpace(installDir) || !Directory.Exists(installDir))
-                throw new InvalidOperationException("找不到安装目录。");
+                throw new InvalidOperationException("\u627e\u4e0d\u5230\u5b89\u88c5\u76ee\u5f55\u3002");
 
             var tempCmd = Path.Combine(Path.GetTempPath(), "AndrogenRagUninstall_" + Guid.NewGuid().ToString("N") + ".cmd");
             var builder = new StringBuilder();
