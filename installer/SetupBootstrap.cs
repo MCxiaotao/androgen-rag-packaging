@@ -39,6 +39,21 @@ namespace AndrogenRagSetup
         public string shortcut_name = "Androgen RAG";
     }
 
+    internal sealed class LauncherConfig
+    {
+        public string app_id = "AndrogenRAG";
+        public string display_name = "Androgen RAG";
+        public string channel = "stable";
+        public string bootstrap_version = "1.0.0";
+        public string state_dir = "";
+        public string manifest_url = "";
+        public bool update_enabled = true;
+        public bool open_browser = true;
+        public int default_port = 8501;
+        public int request_timeout_seconds = 10;
+        public int update_retry_count = 3;
+    }
+
     internal sealed class RunningProcessInfo
     {
         public int Id;
@@ -97,6 +112,8 @@ namespace AndrogenRagSetup
         private readonly CheckBox _startMenuShortcutBox;
         private readonly TextBox _installPathBox;
         private readonly Button _browseButton;
+        private readonly TextBox _dataPathBox;
+        private readonly Button _dataBrowseButton;
         private readonly Label _progressLabel;
         private readonly ProgressBar _progressBar;
         private readonly Label _finishSummaryLabel;
@@ -297,12 +314,38 @@ namespace AndrogenRagSetup
             _browseButton.Click += BrowseButton_Click;
             _locationPage.Controls.Add(_browseButton);
 
+            var dataPathLabel = new Label
+            {
+                Text = "用户数据目录",
+                AutoSize = true,
+                Font = new Font(SystemFonts.MessageBoxFont, FontStyle.Bold),
+                Location = new Point(10, 100),
+            };
+            _locationPage.Controls.Add(dataPathLabel);
+
+            _dataPathBox = new TextBox
+            {
+                Location = new Point(10, 130),
+                Size = new Size(560, 28),
+                Text = ResolveDefaultStateDir(),
+            };
+            _locationPage.Controls.Add(_dataPathBox);
+
+            _dataBrowseButton = new Button
+            {
+                Text = "浏览...",
+                Location = new Point(584, 127),
+                Size = new Size(100, 28),
+            };
+            _dataBrowseButton.Click += DataBrowseButton_Click;
+            _locationPage.Controls.Add(_dataBrowseButton);
+
             var locationHint = new Label
             {
-                Text = "程序文件会安装到这里。用户输入输出、日志和缓存默认存放在 %LOCALAPPDATA%\\" + payload.app_id + "，不会跟安装目录混在一起。",
+                Text = "程序文件会安装到这里。用户输入输出、日志和缓存会存放在你选择的用户数据目录里，不会跟安装目录混在一起。",
                 AutoSize = false,
-                Size = new Size(680, 72),
-                Location = new Point(10, 94),
+                Size = new Size(680, 92),
+                Location = new Point(10, 182),
             };
             _locationPage.Controls.Add(locationHint);
 
@@ -406,6 +449,11 @@ namespace AndrogenRagSetup
             ShowInstallFolderPicker();
         }
 
+        private void DataBrowseButton_Click(object sender, EventArgs e)
+        {
+            ShowDataFolderPicker();
+        }
+
         private void ShowInstallFolderPicker()
         {
             using (var dialog = new FolderBrowserDialog())
@@ -414,6 +462,17 @@ namespace AndrogenRagSetup
                 dialog.Description = "选择安装目录";
                 if (dialog.ShowDialog(this) == DialogResult.OK)
                     _installPathBox.Text = dialog.SelectedPath;
+            }
+        }
+
+        private void ShowDataFolderPicker()
+        {
+            using (var dialog = new FolderBrowserDialog())
+            {
+                dialog.SelectedPath = _dataPathBox.Text;
+                dialog.Description = "选择用户数据目录";
+                if (dialog.ShowDialog(this) == DialogResult.OK)
+                    _dataPathBox.Text = dialog.SelectedPath;
             }
         }
 
@@ -489,7 +548,25 @@ namespace AndrogenRagSetup
                 return;
             }
 
-            var stateDir = DefaultStateDir();
+            var stateDir = (_dataPathBox.Text ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(stateDir))
+                stateDir = ResolveDefaultStateDir();
+            stateDir = Path.GetFullPath(stateDir);
+            if (!TryValidateStateDirectory(installDir, stateDir, out validationMessage))
+            {
+                var dataChoice = MessageBox.Show(
+                    this,
+                    validationMessage + "\r\n\r\n点击“是”立即选择其他用户数据目录，点击“否”返回当前页面后手动修改。",
+                    "安装",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+                _dataPathBox.Focus();
+                _dataPathBox.SelectAll();
+                if (dataChoice == DialogResult.Yes)
+                    ShowDataFolderPicker();
+                return;
+            }
+
             if (!EnsureNoConflictingProcesses(installDir, stateDir))
                 return;
 
@@ -527,8 +604,9 @@ namespace AndrogenRagSetup
                 try
                 {
                     InstallTo(installDir);
+                    UpdateLauncherConfig(installDir, stateDir);
                     SyncShortcuts(installDir);
-                    var manifest = WriteInstallManifest(installDir);
+                    var manifest = WriteInstallManifest(installDir, stateDir);
                     RegisterUninstallEntry(manifest);
                     BeginInvoke((Action)delegate
                     {
@@ -642,7 +720,7 @@ namespace AndrogenRagSetup
             return Path.Combine(localAppData, "Apps", _payload.app_id ?? "AndrogenRAG");
         }
 
-        private string DefaultStateDir()
+        private string ResolveDefaultStateDir()
         {
             return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), _payload.app_id ?? "AndrogenRAG");
         }
@@ -682,6 +760,61 @@ namespace AndrogenRagSetup
                     + ex.Message;
                 return false;
             }
+        }
+
+        private static bool TryValidateStateDirectory(string installDir, string stateDir, out string message)
+        {
+            if (PathsOverlap(installDir, stateDir))
+            {
+                message = "用户数据目录不能与安装目录相同，也不能互相包含。\r\n\r\n请改成单独的目录，例如 D:\\AndrogenRAG-Data。";
+                return false;
+            }
+
+            try
+            {
+                if (File.Exists(stateDir))
+                {
+                    message = "当前用户数据路径指向了一个文件，请改成文件夹路径。";
+                    return false;
+                }
+
+                Directory.CreateDirectory(stateDir);
+                var probePath = Path.Combine(stateDir, ".write-test-" + Guid.NewGuid().ToString("N") + ".tmp");
+                File.WriteAllText(probePath, "ok", Encoding.ASCII);
+                File.Delete(probePath);
+                message = string.Empty;
+                return true;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                message =
+                    "无法写入当前用户数据目录：\r\n"
+                    + stateDir
+                    + "\r\n\r\n请选择你有写权限的目录，例如 D:\\AndrogenRAG-Data。\r\n\r\n"
+                    + ex.Message;
+                return false;
+            }
+            catch (Exception ex)
+            {
+                message =
+                    "当前用户数据目录不可用：\r\n"
+                    + stateDir
+                    + "\r\n\r\n"
+                    + ex.Message;
+                return false;
+            }
+        }
+
+        private static bool PathsOverlap(string left, string right)
+        {
+            var a = NormalizeFullPath(left);
+            var b = NormalizeFullPath(right);
+            return a.StartsWith(b, StringComparison.OrdinalIgnoreCase) || b.StartsWith(a, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeFullPath(string path)
+        {
+            return Path.GetFullPath(path).TrimEnd('\\') + "\\";
         }
 
         private static string BuildInstallErrorMessage(Exception ex, string installDir)
@@ -837,7 +970,7 @@ namespace AndrogenRagSetup
             shortcutType.InvokeMember("Save", BindingFlags.InvokeMethod, null, shortcut, null);
         }
 
-        private InstallManifest WriteInstallManifest(string installDir)
+        private InstallManifest WriteInstallManifest(string installDir, string stateDir)
         {
             var manifest = new InstallManifest
             {
@@ -846,7 +979,7 @@ namespace AndrogenRagSetup
                 publisher = _payload.publisher ?? "MCxiaotao",
                 version = _payload.bootstrap_version ?? "1.0.0",
                 install_dir = installDir,
-                state_dir = DefaultStateDir(),
+                state_dir = stateDir,
                 launcher_exe = "launcher.exe",
                 uninstall_exe = "uninstall.exe",
                 shortcut_name = _payload.shortcut_name ?? _payload.display_name ?? "Androgen RAG",
@@ -891,6 +1024,24 @@ namespace AndrogenRagSetup
                 WorkingDirectory = installDir,
                 UseShellExecute = true,
             });
+        }
+
+        private void UpdateLauncherConfig(string installDir, string stateDir)
+        {
+            var launcherJsonPath = Path.Combine(installDir, "launcher.json");
+            var serializer = new JavaScriptSerializer();
+            LauncherConfig config;
+            if (File.Exists(launcherJsonPath))
+                config = serializer.Deserialize<LauncherConfig>(File.ReadAllText(launcherJsonPath, Encoding.UTF8)) ?? new LauncherConfig();
+            else
+                config = new LauncherConfig();
+
+            config.app_id = _payload.app_id ?? "AndrogenRAG";
+            config.display_name = _payload.display_name ?? "Androgen RAG";
+            config.bootstrap_version = _payload.bootstrap_version ?? "1.0.0";
+            config.state_dir = stateDir;
+
+            File.WriteAllText(launcherJsonPath, serializer.Serialize(config), new UTF8Encoding(false));
         }
 
         private bool EnsureNoConflictingProcesses(string installDir, string stateDir)

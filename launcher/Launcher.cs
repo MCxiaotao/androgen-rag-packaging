@@ -18,6 +18,7 @@ namespace AndrogenRagLauncher
         public string display_name = "Androgen RAG";
         public string channel = "stable";
         public string bootstrap_version = "1.0.0";
+        public string state_dir = "";
         public string manifest_url = "";
         public bool update_enabled = true;
         public bool open_browser = true;
@@ -96,7 +97,7 @@ namespace AndrogenRagLauncher
             {
                 var installDir = InstallRoot();
                 var settings = LoadSettings(installDir);
-                var stateDir = StateRoot(settings.app_id);
+                var stateDir = StateRoot(settings);
                 EnsureStateTree(stateDir);
                 LogPath = Path.Combine(stateDir, "logs", "launcher", "launcher.log");
                 Log("Launcher starting from " + installDir);
@@ -174,16 +175,23 @@ namespace AndrogenRagLauncher
             return Path.GetDirectoryName(Process.GetCurrentProcess().MainModule.FileName);
         }
 
-        private static string StateRoot(string appId)
+        private static string StateRoot(LauncherSettings settings)
         {
+            var explicitDir = Environment.GetEnvironmentVariable("APP_STATE_DIR");
+            if (!string.IsNullOrWhiteSpace(explicitDir))
+                return explicitDir;
+
             var overrideRoot = Environment.GetEnvironmentVariable("APP_STATE_ROOT");
             if (!string.IsNullOrWhiteSpace(overrideRoot))
-                return Path.Combine(overrideRoot, appId);
+                return Path.Combine(overrideRoot, settings.app_id);
+
+            if (!string.IsNullOrWhiteSpace(settings.state_dir))
+                return settings.state_dir;
 
             var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (string.IsNullOrWhiteSpace(localAppData))
                 throw new InvalidOperationException("LocalApplicationData not available.");
-            return Path.Combine(localAppData, appId);
+            return Path.Combine(localAppData, settings.app_id);
         }
 
         private static void EnsureStateTree(string root)
