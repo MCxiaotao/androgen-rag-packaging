@@ -37,6 +37,14 @@ namespace AndrogenRagLauncher
         public string updated_at = null;
     }
 
+    internal sealed class RunningState
+    {
+        public int pid = 0;
+        public int port = 0;
+        public string version = null;
+        public string updated_at = null;
+    }
+
     internal sealed class ManifestWindows
     {
         public string arch = "x64";
@@ -153,18 +161,31 @@ namespace AndrogenRagLauncher
                 PrepareBundleRuntimeLayout(bundleDir, stateDir);
                 EnsureBundleIsValid(bundleDir);
 
+                if (TryReuseExistingRun(stateDir, settings, bundleDir, launchVersion))
+                    return 0;
+
                 var port = FindFreePort(settings.default_port);
-                Log("Starting local app version " + launchVersion + "..."); var process = LaunchApp(bundleDir, installDir, stateDir, launchVersion, port); Log("Waiting for local app on http://127.0.0.1:" + port + "/");
-                if (WaitForReady(port, 45))
+                Log("Starting local app version " + launchVersion + "...");
+                var process = LaunchApp(bundleDir, installDir, stateDir, launchVersion, port);
+                Log("Waiting for local app on " + LocalUrl(port));
+                if (WaitForReady(process, port, 90))
                 {
+                    SaveRunningState(stateDir, new RunningState
+                    {
+                        pid = process != null ? process.Id : 0,
+                        port = port,
+                        version = launchVersion,
+                        updated_at = DateTime.UtcNow.ToString("o"),
+                    });
                     state = CommitSuccessfulLaunch(stateDir, state, launchVersion);
                     if (settings.open_browser)
                         OpenBrowser(port);
-                    Log("Launched version " + launchVersion + " on port " + port);
+                    Log("Launched version " + launchVersion + " on " + LocalUrl(port));
                     return 0;
                 }
 
                 TryKill(process);
+                ClearRunningState(stateDir);
                 Log("Launch failed for version " + launchVersion);
 
                 if (!string.IsNullOrWhiteSpace(state.pending_version) && !string.Equals(state.pending_version, state.current_version, StringComparison.OrdinalIgnoreCase))
@@ -176,17 +197,29 @@ namespace AndrogenRagLauncher
                         var fallbackDir = VersionDir(stateDir, fallbackVersion);
                         PrepareBundleRuntimeLayout(fallbackDir, stateDir);
                         EnsureBundleIsValid(fallbackDir);
+                        if (TryReuseExistingRun(stateDir, settings, fallbackDir, fallbackVersion))
+                            return 0;
+
                         var fallbackPort = FindFreePort(settings.default_port);
                         var fallbackProcess = LaunchApp(fallbackDir, installDir, stateDir, fallbackVersion, fallbackPort);
-                        if (WaitForReady(fallbackPort, 45))
+                        Log("Waiting for rollback app on " + LocalUrl(fallbackPort));
+                        if (WaitForReady(fallbackProcess, fallbackPort, 90))
                         {
+                            SaveRunningState(stateDir, new RunningState
+                            {
+                                pid = fallbackProcess != null ? fallbackProcess.Id : 0,
+                                port = fallbackPort,
+                                version = fallbackVersion,
+                                updated_at = DateTime.UtcNow.ToString("o"),
+                            });
                             CommitSuccessfulLaunch(stateDir, state, fallbackVersion);
                             if (settings.open_browser)
                                 OpenBrowser(fallbackPort);
-                            Log("Rollback launch succeeded on " + fallbackVersion);
+                            Log("Rollback launch succeeded on " + LocalUrl(fallbackPort));
                             return 0;
                         }
                         TryKill(fallbackProcess);
+                        ClearRunningState(stateDir);
                     }
                 }
 
@@ -276,6 +309,33 @@ namespace AndrogenRagLauncher
         {
             state.updated_at = DateTime.UtcNow.ToString("o");
             SaveJsonAtomic(Path.Combine(stateDir, "current.json"), state);
+        }
+
+        private static string RunningStatePath(string stateDir)
+        {
+            return Path.Combine(stateDir, "running.json");
+        }
+
+        private static RunningState LoadRunningState(string stateDir)
+        {
+            return LoadJson<RunningState>(RunningStatePath(stateDir), null);
+        }
+
+        private static void SaveRunningState(string stateDir, RunningState state)
+        {
+            if (state == null)
+            {
+                ClearRunningState(stateDir);
+                return;
+            }
+
+            state.updated_at = DateTime.UtcNow.ToString("o");
+            SaveJsonAtomic(RunningStatePath(stateDir), state);
+        }
+
+        private static void ClearRunningState(string stateDir)
+        {
+            SafeDeleteFile(RunningStatePath(stateDir));
         }
 
         private static string VersionDir(string stateDir, string version)
@@ -685,33 +745,27 @@ namespace AndrogenRagLauncher
             }
         }
 
-        private static bool WaitForReady(int port, int timeoutSeconds)
+        private static bool WaitForReady(Process process, int port, int timeoutSeconds)
         {
             var deadline = DateTime.UtcNow.AddSeconds(timeoutSeconds);
-            var urls = new[]
-            {
-                "http://127.0.0.1:" + port + "/_stcore/health",
-                "http://127.0.0.1:" + port + "/",
-            };
-
             while (DateTime.UtcNow < deadline)
             {
-                foreach (var url in urls)
+                try
                 {
-                    try
+                    if (process != null && process.HasExited)
                     {
-                        var request = WebRequest.Create(url);
-                        request.Timeout = 3000;
-                        using (var response = (HttpWebResponse)request.GetResponse())
-                        {
-                            if ((int)response.StatusCode < 500)
-                                return true;
-                        }
-                    }
-                    catch
-                    {
+                        Log("App process exited before becoming ready.");
+                        return false;
                     }
                 }
+                catch
+                {
+                }
+
+                if (IsUrlResponsive("http://127.0.0.1:" + port + "/_stcore/health", 3000)
+                    || IsUrlResponsive("http://127.0.0.1:" + port + "/", 3000))
+                    return true;
+
                 Thread.Sleep(1000);
             }
             return false;
@@ -719,7 +773,35 @@ namespace AndrogenRagLauncher
 
         private static void OpenBrowser(int port)
         {
-            try { Process.Start(new ProcessStartInfo("http://127.0.0.1:" + port + "/") { UseShellExecute = true }); } catch (Exception ex) { Log("Browser auto-open failed: " + ex.Message); Log("Open manually: http://127.0.0.1:" + port + "/"); }
+            try
+            {
+                Process.Start(new ProcessStartInfo(LocalUrl(port)) { UseShellExecute = true });
+            }
+            catch (Exception ex)
+            {
+                Log("Browser auto-open failed: " + ex.Message);
+                Log("Open manually: " + LocalUrl(port));
+            }
+        }
+
+        private static bool IsUrlResponsive(string url, int timeoutMilliseconds)
+        {
+            try
+            {
+                var request = WebRequest.Create(url);
+                request.Timeout = timeoutMilliseconds;
+                var httpRequest = request as HttpWebRequest;
+                if (httpRequest != null)
+                    httpRequest.ReadWriteTimeout = timeoutMilliseconds;
+                using (var response = (HttpWebResponse)request.GetResponse())
+                {
+                    return (int)response.StatusCode < 500;
+                }
+            }
+            catch
+            {
+                return false;
+            }
         }
 
         private static CurrentState CommitSuccessfulLaunch(string stateDir, CurrentState state, string launchedVersion)
@@ -740,9 +822,108 @@ namespace AndrogenRagLauncher
             return state;
         }
 
+        private static bool TryReuseExistingRun(string stateDir, LauncherSettings settings, string bundleDir, string expectedVersion)
+        {
+            var running = LoadRunningState(stateDir);
+            if (running != null)
+            {
+                if (IsRunningStateHealthy(running, expectedVersion))
+                {
+                    Log("Existing app instance detected on " + LocalUrl(running.port));
+                    if (settings.open_browser)
+                        OpenBrowser(running.port);
+                    return true;
+                }
+
+                ClearRunningState(stateDir);
+            }
+
+            var recovered = RecoverRunningState(bundleDir, settings.default_port, expectedVersion);
+            if (recovered == null)
+                return false;
+
+            SaveRunningState(stateDir, recovered);
+            Log("Recovered running app instance on " + LocalUrl(recovered.port));
+            if (settings.open_browser)
+                OpenBrowser(recovered.port);
+            return true;
+        }
+
+        private static bool IsRunningStateHealthy(RunningState running, string expectedVersion)
+        {
+            if (running == null || running.pid <= 0 || running.port <= 0)
+                return false;
+            if (!string.IsNullOrWhiteSpace(expectedVersion) &&
+                !string.Equals(running.version, expectedVersion, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            try
+            {
+                var process = Process.GetProcessById(running.pid);
+                if (process.HasExited)
+                    return false;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return IsUrlResponsive("http://127.0.0.1:" + running.port + "/_stcore/health", 2000)
+                || IsUrlResponsive("http://127.0.0.1:" + running.port + "/", 2000);
+        }
+
+        private static RunningState RecoverRunningState(string bundleDir, int preferredPort, string expectedVersion)
+        {
+            var runtimePython = Path.Combine(bundleDir, "runtime", "python.exe");
+            var pid = FindManagedPythonProcessId(runtimePython);
+            if (pid <= 0)
+                return null;
+
+            foreach (var port in CandidatePorts(preferredPort))
+            {
+                if (!IsUrlResponsive("http://127.0.0.1:" + port + "/_stcore/health", 2000)
+                    && !IsUrlResponsive("http://127.0.0.1:" + port + "/", 2000))
+                    continue;
+
+                return new RunningState
+                {
+                    pid = pid,
+                    port = port,
+                    version = expectedVersion,
+                };
+            }
+
+            return null;
+        }
+
+        private static int FindManagedPythonProcessId(string pythonPath)
+        {
+            if (string.IsNullOrWhiteSpace(pythonPath) || !File.Exists(pythonPath))
+                return 0;
+
+            var expected = Path.GetFullPath(pythonPath).TrimEnd('\\');
+            foreach (var process in Process.GetProcessesByName("python"))
+            {
+                try
+                {
+                    var actual = process.MainModule.FileName;
+                    if (string.IsNullOrWhiteSpace(actual))
+                        continue;
+                    actual = Path.GetFullPath(actual).TrimEnd('\\');
+                    if (string.Equals(actual, expected, StringComparison.OrdinalIgnoreCase))
+                        return process.Id;
+                }
+                catch
+                {
+                }
+            }
+
+            return 0;
+        }
+
         private static int FindFreePort(int preferredPort)
         {
-            foreach (var port in new[] { preferredPort, 8502, 8503, 8504, 8505 })
+            foreach (var port in CandidatePorts(preferredPort))
             {
                 try
                 {
@@ -761,6 +942,21 @@ namespace AndrogenRagLauncher
             var freePort = ((System.Net.IPEndPoint)fallback.LocalEndpoint).Port;
             fallback.Stop();
             return freePort;
+        }
+
+        private static IEnumerable<int> CandidatePorts(int preferredPort)
+        {
+            var seen = new HashSet<int>();
+            foreach (var port in new[] { preferredPort, 8502, 8503, 8504, 8505 })
+            {
+                if (port > 0 && seen.Add(port))
+                    yield return port;
+            }
+        }
+
+        private static string LocalUrl(int port)
+        {
+            return "http://localhost:" + port + "/";
         }
 
         private static int CompareVersions(string left, string right)
