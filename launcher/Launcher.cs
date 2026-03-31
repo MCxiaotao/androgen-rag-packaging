@@ -65,7 +65,36 @@ namespace AndrogenRagLauncher
         public string min_launcher_version = "1.0.0";
         public ManifestWindows windows = new ManifestWindows();
     }
+    internal sealed class TimeoutWebClient : WebClient
+    {
+        public int TimeoutMilliseconds { get; private set; }
 
+        public TimeoutWebClient(int timeoutMilliseconds)
+        {
+            TimeoutMilliseconds = Math.Max(1000, timeoutMilliseconds);
+        }
+
+        protected override WebRequest GetWebRequest(Uri address)
+        {
+            var request = base.GetWebRequest(address);
+            if (request == null)
+                return null;
+
+            request.Timeout = TimeoutMilliseconds;
+            var proxy = WebRequest.DefaultWebProxy;
+            if (proxy != null)
+            {
+                proxy.Credentials = CredentialCache.DefaultCredentials;
+                request.Proxy = proxy;
+            }
+
+            var httpRequest = request as HttpWebRequest;
+            if (httpRequest != null)
+                httpRequest.ReadWriteTimeout = TimeoutMilliseconds;
+
+            return request;
+        }
+    }
     internal static class Program
     {
         private const string LauncherVersion = "1.0.0";
@@ -109,7 +138,7 @@ namespace AndrogenRagLauncher
 
                 try
                 {
-                    state = MaybeUpdateBundle(settings, stateDir, state);
+                    Log("Checking for updates..."); state = MaybeUpdateBundle(settings, stateDir, state);
                 }
                 catch (Exception ex)
                 {
@@ -125,7 +154,7 @@ namespace AndrogenRagLauncher
                 EnsureBundleIsValid(bundleDir);
 
                 var port = FindFreePort(settings.default_port);
-                var process = LaunchApp(bundleDir, installDir, stateDir, launchVersion, port);
+                Log("Starting local app version " + launchVersion + "..."); var process = LaunchApp(bundleDir, installDir, stateDir, launchVersion, port); Log("Waiting for local app on http://127.0.0.1:" + port + "/");
                 if (WaitForReady(port, 45))
                 {
                     state = CommitSuccessfulLaunch(stateDir, state, launchVersion);
@@ -310,7 +339,7 @@ namespace AndrogenRagLauncher
         {
             if (string.IsNullOrWhiteSpace(url))
                 return null;
-            using (var client = new WebClient())
+            using (var client = new TimeoutWebClient(Math.Max(1, timeoutSeconds) * 1000))
             {
                 client.Headers.Add("User-Agent", "androgen-rag-launcher/1.0");
                 client.Encoding = Encoding.UTF8;
@@ -387,7 +416,7 @@ namespace AndrogenRagLauncher
                 try
                 {
                     Log("Downloading full bundle for " + manifest.version + " (attempt " + attempt + "/" + attempts + ")");
-                    using (var client = new WebClient())
+                    using (var client = new TimeoutWebClient(20 * 60 * 1000))
                     {
                         client.Headers.Add("User-Agent", "androgen-rag-launcher/1.0");
                         client.DownloadFile(manifest.windows.url, partialPath);
@@ -690,7 +719,7 @@ namespace AndrogenRagLauncher
 
         private static void OpenBrowser(int port)
         {
-            Process.Start("http://127.0.0.1:" + port + "/");
+            try { Process.Start(new ProcessStartInfo("http://127.0.0.1:" + port + "/") { UseShellExecute = true }); } catch (Exception ex) { Log("Browser auto-open failed: " + ex.Message); Log("Open manually: http://127.0.0.1:" + port + "/"); }
         }
 
         private static CurrentState CommitSuccessfulLaunch(string stateDir, CurrentState state, string launchedVersion)
